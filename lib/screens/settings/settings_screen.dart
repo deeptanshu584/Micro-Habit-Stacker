@@ -1,9 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/prefs_service.dart';
 import '../../core/utils/notification_service.dart';
+import '../../core/utils/sound_service.dart';
 import '../../providers/isar_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -15,6 +17,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _streakFreezeEnabled = PrefsService.streakFreezeEnabled;
+  bool _hapticsEnabled = PrefsService.hapticsEnabled;
+  bool _soundEnabled = PrefsService.soundEnabled;
 
   Future<void> _confirmReset(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -126,6 +130,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               size: 18,
             ),
           ).animate().fadeIn(delay: 100.ms),
+          const SizedBox(height: 10),
+          _SettingsTile(
+            icon: '📳',
+            title: 'Haptic Feedback',
+            subtitle: 'Vibrations on swipe, completion & charts',
+            trailing: Switch(
+              value: _hapticsEnabled,
+              activeColor: AppColors.primary,
+              onChanged: (val) async {
+                setState(() => _hapticsEnabled = val);
+                await PrefsService.setHapticsEnabled(val);
+                if (val) HapticFeedback.selectionClick(); // preview
+              },
+            ),
+          ).animate().fadeIn(delay: 120.ms),
+          const SizedBox(height: 10),
+          _SettingsTile(
+            icon: '🔊',
+            title: 'Sound Effects',
+            subtitle: 'Play sounds on interactions',
+            trailing: Switch(
+              value: _soundEnabled,
+              activeColor: AppColors.primary,
+              onChanged: (val) async {
+                setState(() => _soundEnabled = val);
+                await PrefsService.setSoundEnabled(val);
+                if (val) await SoundService.playClick(); // preview
+              },
+            ),
+          ).animate().fadeIn(delay: 140.ms),
           const SizedBox(height: 24),
           _SectionHeader('About'),
           const SizedBox(height: 12),

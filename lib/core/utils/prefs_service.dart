@@ -1,4 +1,4 @@
-﻿import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PrefsService {
   static late SharedPreferences _prefs;
@@ -26,6 +26,20 @@ class PrefsService {
 
   static Future<void> setStreakFreeze(bool value) =>
       _prefs.setBool('streak_freeze_enabled', value);
+
+  // Haptic feedback toggle (default ON)
+  static bool get hapticsEnabled =>
+      _prefs.getBool('haptics_enabled') ?? true;
+
+  static Future<void> setHapticsEnabled(bool value) =>
+      _prefs.setBool('haptics_enabled', value);
+
+  // Sound effects toggle (default OFF)
+  static bool get soundEnabled =>
+      _prefs.getBool('sound_enabled') ?? false;
+
+  static Future<void> setSoundEnabled(bool value) =>
+      _prefs.setBool('sound_enabled', value);
 
   // Clear all data (used in Settings > Reset)
   static Future<void> clearAll() => _prefs.clear();

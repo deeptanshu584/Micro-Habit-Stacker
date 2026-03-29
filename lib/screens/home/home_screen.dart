@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/haptic_helper.dart';
 import '../../providers/habit_stack_provider.dart';
 import '../../providers/completion_provider.dart';
-import '../../widgets/habit_card.dart';
+import '../../widgets/swipeable_habit_card.dart';
 import '../add_stack/add_stack_screen.dart';
 import '../complete/swipe_complete_screen.dart';
 import '../streaks/streak_screen.dart';
@@ -42,6 +43,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               slivers: [
                 SliverToBoxAdapter(child: _Header(completed: completed, total: total)),
                 SliverToBoxAdapter(child: _ProgressBar(completed: completed, total: total)),
+                if (completed >= 2 && total > 0)
+                  SliverToBoxAdapter(child: _MotivationalBanner(completed: completed, total: total)),
                 SliverToBoxAdapter(child: _QuoteCard()),
                 if (stacks.isEmpty)
                   SliverFillRemaining(child: _EmptyState())
@@ -53,7 +56,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         (context, index) {
                           final stack = stacks[index];
                           final isDone = completions.contains(stack.uid);
-                          return HabitCard(
+                          return SwipeableHabitCard(
                             stack: stack,
                             isDone: isDone,
                             index: index,
@@ -72,7 +75,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 );
                               }
                             },
-                          );
+                            onComplete: () {
+                              ref
+                                  .read(completionNotifierProvider.notifier)
+                                  .markComplete(stack.uid, 0);
+                            },
+                          )
+                              .animate(
+                                delay: Duration(milliseconds: 60 + index * 80),
+                              )
+                              .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                              .slideY(
+                                begin: 0.08,
+                                duration: 350.ms,
+                                curve: Curves.easeOutCubic,
+                              );
                         },
                         childCount: stacks.length,
                       ),
@@ -126,9 +143,9 @@ class _Header extends StatelessWidget {
 
   String _greeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning ??';
-    if (hour < 17) return 'Good afternoon ?';
-    return 'Good evening ??';
+    if (hour < 12) return 'Good morning ☀️';
+    if (hour < 17) return 'Good afternoon 🌤️';
+    return 'Good evening 🌙';
   }
 
   @override
@@ -138,27 +155,34 @@ class _Header extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _greeting(),
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _greeting(),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Your Stacks',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
+                const SizedBox(height: 4),
+                const Text(
+                  'Your Stacks',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           Row(
             children: [
               Container(
@@ -219,7 +243,7 @@ class _ProgressBar extends StatelessWidget {
           if (completed == total && total > 0) ...[
             const SizedBox(height: 8),
             const Text(
-              '?? All done for today!',
+              '🎉 All done for today!',
               style: TextStyle(
                 color: AppColors.accentGold,
                 fontSize: 13,
@@ -251,7 +275,7 @@ class _QuoteCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Text('?', style: TextStyle(fontSize: 18)),
+            const Text('✨', style: TextStyle(fontSize: 18)),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -277,7 +301,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('??', style: TextStyle(fontSize: 64)),
+          const Text('📋', style: TextStyle(fontSize: 64)),
           const SizedBox(height: 16),
           const Text(
             'No stacks yet',
@@ -313,5 +337,131 @@ class _AddButton extends StatelessWidget {
         style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
       ),
     ).animate().slideY(begin: 1, delay: 400.ms, duration: 400.ms);
+  }
+}
+
+// ─── Motivational Banner ────────────────────────────────────────────────────
+
+class _MotivationalBanner extends StatefulWidget {
+  final int completed;
+  final int total;
+  const _MotivationalBanner({required this.completed, required this.total});
+
+  @override
+  State<_MotivationalBanner> createState() => _MotivationalBannerState();
+}
+
+class _MotivationalBannerState extends State<_MotivationalBanner> {
+  int? _lastHapticCount;
+
+  @override
+  void didUpdateWidget(covariant _MotivationalBanner old) {
+    super.didUpdateWidget(old);
+    // Fire haptic once when hitting the "on fire" tier
+    if (widget.completed >= 5 && _lastHapticCount != widget.completed) {
+      _lastHapticCount = widget.completed;
+      HapticHelper.selectionClick();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.completed;
+    final allDone = c == widget.total && widget.total > 0;
+
+    // Determine tier
+    late String emoji;
+    late String message;
+    late Color tint;
+    late double glowOpacity;
+
+    if (allDone) {
+      emoji = '🎉';
+      message = 'Perfect day! Every habit done!';
+      tint = const Color(0xFFFFD54F);
+      glowOpacity = 0.18;
+    } else if (c >= 5) {
+      emoji = '🔥';
+      message = "You're on fire!";
+      tint = const Color(0xFFFF7043);
+      glowOpacity = 0.14;
+    } else if (c >= 4) {
+      emoji = '💪';
+      message = 'Great consistency today!';
+      tint = const Color(0xFFFFA726);
+      glowOpacity = 0.08;
+    } else if (c >= 3) {
+      emoji = '🚀';
+      message = "You're building momentum!";
+      tint = const Color(0xFFAB47BC);
+      glowOpacity = 0.06;
+    } else {
+      emoji = '👍';
+      message = 'Nice start — keep going!';
+      tint = const Color(0xFF66BB6A);
+      glowOpacity = 0.0;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 350),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (child, anim) => FadeTransition(
+          opacity: anim,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, -0.15),
+              end: Offset.zero,
+            ).animate(anim),
+            child: child,
+          ),
+        ),
+        child: Container(
+          key: ValueKey('$emoji$message'),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: tint.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: tint.withOpacity(0.22), width: 1),
+            boxShadow: glowOpacity > 0
+                ? [
+                    BoxShadow(
+                      color: tint.withOpacity(glowOpacity),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  message,
+                  style: TextStyle(
+                    color: tint,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+              Text(
+                '$c done',
+                style: TextStyle(
+                  color: tint.withOpacity(0.7),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(duration: 350.ms).slideY(begin: -0.08, duration: 300.ms);
   }
 }

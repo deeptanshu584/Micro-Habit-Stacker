@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/emoji_helper.dart';
 import '../../models/habit_stack.dart';
 import '../../providers/streak_provider.dart';
 import '../../widgets/heatmap_widget.dart';
@@ -185,6 +186,10 @@ class _StackStreakCard extends StatelessWidget {
     final color =
         AppColors.stackColors[stack.colorIndex % AppColors.stackColors.length];
 
+    final emoji = stack.emoji == '?'
+        ? getHabitEmoji('${stack.triggerHabit} ${stack.newHabit}')
+        : stack.emoji;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
@@ -198,7 +203,7 @@ class _StackStreakCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(stack.emoji, style: const TextStyle(fontSize: 28)),
+              Text(emoji, style: const TextStyle(fontSize: 28)),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

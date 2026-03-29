@@ -1,10 +1,13 @@
-﻿import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/haptic_helper.dart';
+import '../../core/utils/sound_service.dart';
 import '../../models/habit_stack.dart';
 import '../../providers/completion_provider.dart';
+import '../../widgets/emoji_burst.dart';
 
 class SwipeCompleteScreen extends ConsumerStatefulWidget {
   final HabitStack stack;
@@ -54,27 +57,45 @@ class _SwipeCompleteScreenState extends ConsumerState<SwipeCompleteScreen>
   }
 
   Future<void> _complete() async {
-    HapticFeedback.heavyImpact();
+    HapticHelper.heavyImpact();
+    SoundService.playComplete();
     setState(() => _isCompleted = true);
     await Future.delayed(const Duration(milliseconds: 600));
     if (mounted) _showMoodPicker();
   }
 
   void _showMoodPicker() {
+    // Capture parent context for overlay (modal has its own context)
+    final parentContext = context;
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.4),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       isDismissible: false,
       builder: (_) => _MoodPicker(
         onSelected: (mood) async {
+          // Fire emoji burst on the parent overlay
+          if (mood > 0) {
+            final intensity = mood == 1
+                ? BurstIntensity.meh
+                : mood == 2
+                    ? BurstIntensity.good
+                    : BurstIntensity.great;
+            showEmojiBurst(parentContext, intensity);
+          }
+
           await ref.read(completionNotifierProvider.notifier)
               .markComplete(widget.stack.uid, mood);
+
+          // Brief pause to let the burst animate
+          await Future.delayed(Duration(milliseconds: mood >= 3 ? 800 : 500));
+
           if (mounted) {
-            Navigator.pop(context); // close sheet
-            Navigator.pop(context); // go back to home
+            Navigator.pop(parentContext); // close sheet
+            Navigator.pop(parentContext); // go back to home
           }
         },
       ),
@@ -178,34 +199,39 @@ class _StackContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Emoji with pulse animation
-            AnimatedBuilder(
-              animation: pulseController,
-              builder: (_, __) => Transform.scale(
-                scale: isCompleted
-                    ? 1.3
-                    : 1.0 + (pulseController.value * 0.06),
-                child: Container(
-                  width: 110,
-                  height: 110,
-                  decoration: BoxDecoration(
-                    color: isCompleted
-                        ? AppColors.success.withOpacity(0.2)
-                        : color.withOpacity(0.15 + progress * 0.1),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isCompleted ? AppColors.success : color,
-                      width: 2,
+            Hero(
+              tag: 'habit-emoji-${stack.uid}',
+              child: Material(
+                type: MaterialType.transparency,
+                child: AnimatedBuilder(
+                  animation: pulseController,
+                  builder: (_, __) => Transform.scale(
+                    scale: isCompleted
+                        ? 1.3
+                        : 1.0 + (pulseController.value * 0.06),
+                    child: Container(
+                      width: 110,
+                      height: 110,
+                      decoration: BoxDecoration(
+                        color: isCompleted
+                            ? AppColors.success.withOpacity(0.2)
+                            : color.withOpacity(0.15 + progress * 0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isCompleted ? AppColors.success : color,
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: isCompleted
+                            ? const Icon(Icons.check_rounded,
+                                color: AppColors.success, size: 52)
+                            : Text(
+                                stack.emoji,
+                                style: const TextStyle(fontSize: 52),
+                              ),
+                      ),
                     ),
-                  ),
-                  child: Center(
-                    child: isCompleted
-                        ? const Icon(Icons.check_rounded,
-                            color: AppColors.success, size: 52)
-                        : Text(
-                            stack.emoji,
-                            style: const TextStyle(fontSize: 52),
-                          ),
                   ),
                 ),
               ),
@@ -304,51 +330,68 @@ class _MoodPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(2),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF2A1F14).withOpacity(0.72),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.08),
+              width: 1,
             ),
           ),
-          const SizedBox(height: 24),
-          const Text(
-            '🎉 Done!',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  '🎉 Done!',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'How did that feel?',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _MoodButton(emoji: '😕', label: 'Meh', mood: 1, onTap: onSelected),
+                    _MoodButton(emoji: '😊', label: 'Good', mood: 2, onTap: onSelected),
+                    _MoodButton(emoji: '🔥', label: 'Great', mood: 3, onTap: onSelected),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () => onSelected(0),
+                  child: const Text(
+                    'Skip',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'How did that feel?',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
-          ),
-          const SizedBox(height: 28),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _MoodButton(emoji: '😕', label: 'Meh', mood: 1, onTap: onSelected),
-              _MoodButton(emoji: '😊', label: 'Good', mood: 2, onTap: onSelected),
-              _MoodButton(emoji: '🔥', label: 'Great', mood: 3, onTap: onSelected),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TextButton(
-            onPressed: () => onSelected(0),
-            child: const Text(
-              'Skip',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 14),
-            ),
-          ),
-        ],
+        ),
       ),
     ).animate().slideY(begin: 0.2, duration: 300.ms).fadeIn();
   }
@@ -371,7 +414,7 @@ class _MoodButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        HapticFeedback.lightImpact();
+        HapticHelper.lightImpact();
         onTap(mood);
       },
       child: Container(

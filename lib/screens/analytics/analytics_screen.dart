@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -18,15 +19,13 @@ class AnalyticsScreen extends ConsumerWidget {
         child: analyticsAsync.when(
           loading: () => const Center(
               child: CircularProgressIndicator(color: AppColors.primary)),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, stack) => Center(child: Text('Error: $e')),
           data: (data) => CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: _Header()),
               SliverToBoxAdapter(child: _TopStatsRow(data: data)),
               SliverToBoxAdapter(child: _InsightCards(data: data)),
               SliverToBoxAdapter(child: _Last30DaysChart(data: data)),
-              SliverToBoxAdapter(child: _WeekdayBarChart(data: data)),
-              SliverToBoxAdapter(child: _MoodDonutChart(data: data)),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
@@ -67,21 +66,21 @@ class _TopStatsRow extends StatelessWidget {
             value: '${data.totalCompletions}',
             label: 'Total\nCompletions',
             color: AppColors.primary,
-            icon: '✅',
+            icon: Icons.check_circle_outline_rounded,
           ),
           const SizedBox(width: 12),
           _StatCard(
             value: '${data.overallCompletionRate.toStringAsFixed(0)}%',
             label: 'Last 30\nDays Rate',
             color: AppColors.accentGold,
-            icon: '📈',
+            icon: Icons.show_chart_rounded,
           ),
           const SizedBox(width: 12),
           _StatCard(
             value: '${data.bestDayStreak}d',
             label: 'Best Day\nStreak',
             color: AppColors.success,
-            icon: '🔥',
+            icon: Icons.local_fire_department_rounded,
           ),
         ],
       ),
@@ -93,7 +92,7 @@ class _StatCard extends StatelessWidget {
   final String value;
   final String label;
   final Color color;
-  final String icon;
+  final IconData icon;
 
   const _StatCard({
     required this.value,
@@ -114,7 +113,7 @@ class _StatCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 22)),
+            Icon(icon, color: color, size: 26),
             const SizedBox(height: 8),
             Text(
               value,
@@ -251,15 +250,22 @@ class _InsightTile extends StatelessWidget {
   }
 }
 
-class _Last30DaysChart extends StatelessWidget {
+class _Last30DaysChart extends StatefulWidget {
   final AnalyticsData data;
   const _Last30DaysChart({required this.data});
 
   @override
+  State<_Last30DaysChart> createState() => _Last30DaysChartState();
+}
+
+class _Last30DaysChartState extends State<_Last30DaysChart> {
+  int? _touchedIndex;
+
+  @override
   Widget build(BuildContext context) {
     final spots = <FlSpot>[];
-    for (int i = 0; i < data.last30DayCounts.length; i++) {
-      spots.add(FlSpot(i.toDouble(), data.last30DayCounts[i].toDouble()));
+    for (int i = 0; i < widget.data.last30DayCounts.length; i++) {
+      spots.add(FlSpot(i.toDouble(), widget.data.last30DayCounts[i].toDouble()));
     }
 
     return _ChartCard(
@@ -269,6 +275,7 @@ class _Last30DaysChart extends StatelessWidget {
         height: 140,
         child: LineChart(
           LineChartData(
+            minY: 0,
             gridData: FlGridData(
               show: true,
               drawVerticalLine: false,
@@ -302,6 +309,38 @@ class _Last30DaysChart extends StatelessWidget {
                   sideTitles: SideTitles(showTitles: false)),
             ),
             borderData: FlBorderData(show: false),
+            lineTouchData: LineTouchData(
+              handleBuiltInTouches: true,
+              touchCallback: (event, response) {
+                final idx = response?.lineBarSpots?.first.spotIndex;
+                if (event is FlTapUpEvent || event is FlPanUpdateEvent) {
+                  if (idx != null && idx != _touchedIndex) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _touchedIndex = idx);
+                  }
+                } else if (event is FlPanEndEvent ||
+                    event is FlLongPressEnd) {
+                  setState(() => _touchedIndex = null);
+                }
+              },
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (_) =>
+                    AppColors.surfaceLight,
+                tooltipRoundedRadius: 10,
+                getTooltipItems: (spots) => spots
+                    .map(
+                      (s) => LineTooltipItem(
+                        '${s.y.toInt()} done',
+                        const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
             lineBarsData: [
               LineChartBarData(
                 spots: spots,
@@ -309,7 +348,17 @@ class _Last30DaysChart extends StatelessWidget {
                 color: AppColors.primary,
                 barWidth: 2.5,
                 isStrokeCapRound: true,
-                dotData: FlDotData(show: false),
+                dotData: FlDotData(
+                  show: true,
+                  checkToShowDot: (spot, data) =>
+                      spots.indexOf(spot) == _touchedIndex,
+                  getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                    radius: 5,
+                    color: AppColors.primary,
+                    strokeWidth: 2,
+                    strokeColor: AppColors.textPrimary,
+                  ),
+                ),
                 belowBarData: BarAreaData(
                   show: true,
                   color: AppColors.primary.withOpacity(0.08),
@@ -320,220 +369,6 @@ class _Last30DaysChart extends StatelessWidget {
         ),
       ),
     ).animate().fadeIn(delay: 200.ms);
-  }
-}
-
-class _WeekdayBarChart extends StatelessWidget {
-  final AnalyticsData data;
-  const _WeekdayBarChart({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final maxVal = data.weekdayCounts.reduce((a, b) => a > b ? a : b);
-
-    return _ChartCard(
-      title: 'By Day of Week',
-      subtitle: 'Which days you show up most',
-      child: SizedBox(
-        height: 140,
-        child: BarChart(
-          BarChartData(
-            alignment: BarChartAlignment.spaceAround,
-            maxY: maxVal == 0 ? 5 : maxVal.toDouble() * 1.2,
-            barTouchData: BarTouchData(enabled: false),
-            titlesData: FlTitlesData(
-              leftTitles: AxisTitles(
-                  sideTitles: SideTitles(showTitles: false)),
-              rightTitles: AxisTitles(
-                  sideTitles: SideTitles(showTitles: false)),
-              topTitles: AxisTitles(
-                  sideTitles: SideTitles(showTitles: false)),
-              bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  getTitlesWidget: (value, _) => Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      days[value.toInt()],
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            borderData: FlBorderData(show: false),
-            gridData: FlGridData(show: false),
-            barGroups: List.generate(7, (i) {
-              final isMax = data.weekdayCounts[i] == maxVal && maxVal > 0;
-              return BarChartGroupData(
-                x: i,
-                barRods: [
-                  BarChartRodData(
-                    toY: data.weekdayCounts[i].toDouble(),
-                    color: isMax ? AppColors.primary : AppColors.surfaceLight,
-                    width: 22,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ],
-              );
-            }),
-          ),
-        ),
-      ),
-    ).animate().fadeIn(delay: 250.ms);
-  }
-}
-
-class _MoodDonutChart extends StatelessWidget {
-  final AnalyticsData data;
-  const _MoodDonutChart({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    final meh = data.moodCounts[1] ?? 0;
-    final good = data.moodCounts[2] ?? 0;
-    final great = data.moodCounts[3] ?? 0;
-    final total = meh + good + great;
-
-    return _ChartCard(
-      title: 'Mood Breakdown',
-      subtitle: 'How completing habits made you feel',
-      child: total == 0
-          ? const SizedBox(
-              height: 140,
-              child: Center(
-                child: Text(
-                  'No mood data yet',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            )
-          : SizedBox(
-              height: 140,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: PieChart(
-                      PieChartData(
-                        sectionsSpace: 3,
-                        centerSpaceRadius: 35,
-                        sections: [
-                          if (meh > 0)
-                            PieChartSectionData(
-                              value: meh.toDouble(),
-                              color: AppColors.moodMeh,
-                              radius: 28,
-                              showTitle: false,
-                            ),
-                          if (good > 0)
-                            PieChartSectionData(
-                              value: good.toDouble(),
-                              color: AppColors.moodGood,
-                              radius: 28,
-                              showTitle: false,
-                            ),
-                          if (great > 0)
-                            PieChartSectionData(
-                              value: great.toDouble(),
-                              color: AppColors.moodGreat,
-                              radius: 28,
-                              showTitle: false,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _MoodLegendItem(
-                        emoji: '😕',
-                        label: 'Meh',
-                        count: meh,
-                        color: AppColors.moodMeh,
-                        total: total,
-                      ),
-                      const SizedBox(height: 10),
-                      _MoodLegendItem(
-                        emoji: '😊',
-                        label: 'Good',
-                        count: good,
-                        color: AppColors.moodGood,
-                        total: total,
-                      ),
-                      const SizedBox(height: 10),
-                      _MoodLegendItem(
-                        emoji: '🔥',
-                        label: 'Great',
-                        count: great,
-                        color: AppColors.moodGreat,
-                        total: total,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ),
-            ),
-    ).animate().fadeIn(delay: 300.ms);
-  }
-}
-
-class _MoodLegendItem extends StatelessWidget {
-  final String emoji;
-  final String label;
-  final int count;
-  final Color color;
-  final int total;
-
-  const _MoodLegendItem({
-    required this.emoji,
-    required this.label,
-    required this.count,
-    required this.color,
-    required this.total,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final pct = total == 0 ? 0 : ((count / total) * 100).round();
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          '$emoji $label',
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          '$pct%',
-          style: TextStyle(
-            color: color,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
   }
 }
 

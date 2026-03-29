@@ -5,6 +5,7 @@ import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/emoji_helper.dart';
 import '../../models/habit_stack.dart';
 import '../../providers/habit_stack_provider.dart';
 
@@ -19,6 +20,7 @@ class _AddStackScreenState extends ConsumerState<AddStackScreen> {
   final _triggerController = TextEditingController();
   final _newHabitController = TextEditingController();
   String _selectedEmoji = '?';
+  bool _userPickedEmoji = false; // true when user explicitly picks via emoji picker
   String _selectedCategory = 'Morning';
   int _selectedColorIndex = 0;
   int _reminderHour = -1;
@@ -27,7 +29,37 @@ class _AddStackScreenState extends ConsumerState<AddStackScreen> {
   bool _isSaving = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Live-update the top icon emoji as the user types
+    _triggerController.addListener(_onTextChanged);
+    _newHabitController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    // Only auto-update if the user hasn't manually picked an emoji
+    if (_userPickedEmoji) return;
+    setState(() {});
+  }
+
+  /// Resolves which emoji to display in the top icon.
+  /// Priority: manual pick > keyword match > category fallback.
+  String get _displayEmoji {
+    if (_userPickedEmoji) return _selectedEmoji;
+
+    final combined =
+        '${_triggerController.text} ${_newHabitController.text}'.trim();
+    if (combined.isNotEmpty) {
+      return getHabitEmoji(combined);
+    }
+    // No text yet — show the category emoji
+    return getCategoryEmoji(_selectedCategory);
+  }
+
+  @override
   void dispose() {
+    _triggerController.removeListener(_onTextChanged);
+    _newHabitController.removeListener(_onTextChanged);
     _triggerController.dispose();
     _newHabitController.dispose();
     super.dispose();
@@ -46,11 +78,16 @@ class _AddStackScreenState extends ConsumerState<AddStackScreen> {
 
     setState(() => _isSaving = true);
 
+    // Resolve the final emoji to persist
+    final emoji = _userPickedEmoji
+        ? _selectedEmoji
+        : getHabitEmoji(_newHabitController.text.trim());
+
     final stack = HabitStack()
       ..uid = const Uuid().v4()
       ..triggerHabit = _triggerController.text.trim()
       ..newHabit = _newHabitController.text.trim()
-      ..emoji = _selectedEmoji
+      ..emoji = emoji
       ..category = _selectedCategory
       ..colorIndex = _selectedColorIndex
       ..createdAt = DateTime.now()
@@ -129,7 +166,7 @@ class _AddStackScreenState extends ConsumerState<AddStackScreen> {
               _FormulaCard(
                 triggerController: _triggerController,
                 newHabitController: _newHabitController,
-                emoji: _selectedEmoji,
+                emoji: _displayEmoji,
                 onEmojiTap: () => setState(() => _showEmojiPicker = !_showEmojiPicker),
               ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05),
 
@@ -138,6 +175,7 @@ class _AddStackScreenState extends ConsumerState<AddStackScreen> {
                 _EmojiPickerWidget(
                   onSelected: (emoji) => setState(() {
                     _selectedEmoji = emoji;
+                    _userPickedEmoji = true;
                     _showEmojiPicker = false;
                   }),
                 ).animate().fadeIn(duration: 200.ms),
@@ -266,10 +304,18 @@ class _StyledTextField extends StatelessWidget {
         hintText: hint,
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
         filled: true,
-        fillColor: AppColors.surfaceLight,
+        fillColor: const Color(0xFF2C2318), // slightly brighter than surfaceLight
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.10), width: 1),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.10), width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppColors.primary.withOpacity(0.55), width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),

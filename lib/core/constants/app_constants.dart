@@ -7,11 +7,11 @@ class AppConstants {
     'Other'
   ];
   static const List<String> categoryEmojis = [
-    '??',
-    '??',
-    '??',
-    '??',
-    '??'
+    '🌅',
+    '💼',
+    '🌙',
+    '💪',
+    '⭐'
   ];
   static const List<String> motivationalQuotes = [
     'Small steps every day.',

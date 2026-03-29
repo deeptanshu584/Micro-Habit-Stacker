@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/emoji_helper.dart';
 import '../../models/habit_stack.dart';
 
 class HabitCard extends StatelessWidget {
@@ -79,32 +80,57 @@ class HabitCard extends StatelessWidget {
       onLongPress: () => _showDeleteDialog(context),
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 300),
-        opacity: isDone ? 0.5 : 1.0,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 14),
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
+        opacity: isDone ? 0.7 : 1.0,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
               color: isDone
-                  ? AppColors.success.withOpacity(0.4)
-                  : color.withOpacity(0.3),
-              width: 1.5,
+                  ? AppColors.success.withOpacity(0.12)
+                  : AppColors.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDone
+                    ? AppColors.success.withOpacity(0.4)
+                    : color.withOpacity(0.3),
+                width: 1.5,
+              ),
+              boxShadow: isDone
+                  ? [
+                      BoxShadow(
+                        color: AppColors.success.withOpacity(0.25),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
             ),
-          ),
-          child: Row(
+            child: Row(
             children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(
-                  child: Text(stack.emoji,
-                      style: const TextStyle(fontSize: 26)),
+              Hero(
+                tag: 'habit-emoji-${stack.uid}',
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Center(
+                      child: Text(
+                        stack.emoji == '?'
+                            ? getHabitEmoji('${stack.triggerHabit} ${stack.newHabit}')
+                            : stack.emoji,
+                        style: const TextStyle(fontSize: 26),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -113,17 +139,19 @@ class HabitCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'After I ',
+                      'After I ${stack.triggerHabit},',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                         decoration:
                             isDone ? TextDecoration.lineThrough : null,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'I will ',
+                      'I will ${stack.newHabit}',
                       style: TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 15,
@@ -131,6 +159,8 @@ class HabitCard extends StatelessWidget {
                         decoration:
                             isDone ? TextDecoration.lineThrough : null,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     Container(
